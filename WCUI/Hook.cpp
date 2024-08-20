@@ -6,9 +6,11 @@ using namespace WCUI;
 using namespace Microsoft::WRL;
 
 decltype(&CoCreateInstance) Hook::CoCreateInstanceOriginal = CoCreateInstance;
-decltype(&Hook::RemoveAllEffectsHook) Hook::RemoveAllEffectsOriginal;
+decltype(&Hook::RemoveAllEffectsHook) Hook::GetAvailableDeviceMediaTypeOriginal;
+decltype(&Hook::GetAvailableDeviceMediaTypeHook) Hook::SetCurrentDeviceMediaTypeOriginal;
 decltype(&Hook::PreviewAddStreamHook) Hook::PreviewAddStreamOriginal;
 decltype(&Hook::PhotoAddStreamHook) Hook::PhotoAddStreamOriginal;
+decltype(&Hook::RecordAddStreamHook) Hook::RecordAddStreamOriginal;
 
 bool Hook::IsMediaFoundationHooked = false;
 
@@ -47,7 +49,7 @@ HRESULT WINAPI Hook::CoCreateInstanceHook(_In_ REFCLSID rclsid, _In_opt_ LPUNKNO
 		else if (riid == IID_IMFCaptureEngineClassFactory)
 			return factory.CopyTo(riid, ppv);
 		else
-			return E_NOINTERFACE;
+			return factory->QueryInterface(riid, ppv);
 	}
 
 	return CoCreateInstanceOriginal(rclsid, pUnkOuter, dwClsContext, riid, ppv);
@@ -55,17 +57,32 @@ HRESULT WINAPI Hook::CoCreateInstanceHook(_In_ REFCLSID rclsid, _In_opt_ LPUNKNO
 
 HRESULT WINAPI Hook::RemoveAllEffectsHook(IMFCaptureSource* thisPtr, DWORD dwSourceStreamIndex, DWORD dwMediaTypeIndex, IMFMediaType** ppMediaType)
 {
-	return thisPtr->GetAvailableDeviceMediaType(MF_CAPTURE_ENGINE_PREFERRED_SOURCE_STREAM_FOR_VIDEO_RECORD, dwMediaTypeIndex, ppMediaType);
+	return GetAvailableDeviceMediaTypeOriginal(thisPtr, RedirectStreamIndex(dwSourceStreamIndex), dwMediaTypeIndex, ppMediaType);
+}
+
+HRESULT WINAPI Hook::GetAvailableDeviceMediaTypeHook(IMFCaptureSource* thisPtr, DWORD dwSourceStreamIndex, IMFMediaType* pMediaType)
+{
+	return SetCurrentDeviceMediaTypeOriginal(thisPtr, RedirectUnfriendlyStreamIndex(dwSourceStreamIndex), pMediaType);
+}
+
+HRESULT WINAPI Hook::SetCurrentDeviceMediaTypeHook(IMFCaptureSource* thisPtr, DWORD dwSourceStreamIndex, IMFMediaType** ppMediaType)
+{
+	return thisPtr->GetCurrentDeviceMediaType(RedirectUnfriendlyStreamIndex(dwSourceStreamIndex), ppMediaType);
 }
 
 HRESULT WINAPI Hook::PreviewAddStreamHook(IMFCaptureSink* thisPtr, DWORD dwSourceStreamIndex, IMFMediaType* pMediaType, IMFAttributes* pAttributes, DWORD* pdwSinkStreamIndex)
 {
-	return PreviewAddStreamOriginal(thisPtr, MF_CAPTURE_ENGINE_PREFERRED_SOURCE_STREAM_FOR_VIDEO_RECORD, pMediaType, pAttributes, pdwSinkStreamIndex);
+	return PreviewAddStreamOriginal(thisPtr, RedirectStreamIndex(dwSourceStreamIndex), pMediaType, pAttributes, pdwSinkStreamIndex);
 }
 
 HRESULT WINAPI Hook::PhotoAddStreamHook(IMFCaptureSink* thisPtr, DWORD dwSourceStreamIndex, IMFMediaType* pMediaType, IMFAttributes* pAttributes, DWORD* pdwSinkStreamIndex)
 {
-	return PhotoAddStreamOriginal(thisPtr, MF_CAPTURE_ENGINE_PREFERRED_SOURCE_STREAM_FOR_VIDEO_RECORD, pMediaType, pAttributes, pdwSinkStreamIndex);
+	return PhotoAddStreamOriginal(thisPtr, RedirectStreamIndex(dwSourceStreamIndex), pMediaType, pAttributes, pdwSinkStreamIndex);
+}
+
+HRESULT WINAPI Hook::RecordAddStreamHook(IMFCaptureSink* thisPtr, DWORD dwSourceStreamIndex, IMFMediaType* pMediaType, IMFAttributes* pAttributes, DWORD* pdwSinkStreamIndex)
+{
+	return RecordAddStreamOriginal(thisPtr, RedirectStreamIndex(dwSourceStreamIndex), pMediaType, pAttributes, pdwSinkStreamIndex);
 }
 
 #if ENABLE_DUI_HOOK
@@ -159,8 +176,15 @@ HRESULT Hook::InstallInternal(IMFCaptureEngine* engine)
 	if (FAILED(hr))
 		return hr;
 
+	ComPtr<IMFCaptureSink> recordSink;
+	engine->GetSink(MF_CAPTURE_ENGINE_SINK_TYPE_RECORD, &recordSink);
+	if (FAILED(hr))
+		return hr;
+
 	auto sourceVtbl = *(void***)source.Get();
-	RemoveAllEffectsOriginal = decltype(RemoveAllEffectsOriginal)(sourceVtbl[8]);
+	auto removeAllEffects = decltype(GetAvailableDeviceMediaTypeOriginal)(sourceVtbl[8]);
+	GetAvailableDeviceMediaTypeOriginal = decltype(GetAvailableDeviceMediaTypeOriginal)(sourceVtbl[9]);
+	SetCurrentDeviceMediaTypeOriginal = decltype(SetCurrentDeviceMediaTypeOriginal)(sourceVtbl[10]);
 
 	auto previewSinkVtbl = *(void***)previewSink.Get();
 	PreviewAddStreamOriginal = decltype(PreviewAddStreamOriginal)(previewSinkVtbl[5]);
@@ -168,11 +192,17 @@ HRESULT Hook::InstallInternal(IMFCaptureEngine* engine)
 	auto photoSinkVtbl = *(void***)photoSink.Get();
 	PhotoAddStreamOriginal = decltype(PreviewAddStreamOriginal)(photoSinkVtbl[5]);
 
+	auto recordSinkVtbl = *(void***)recordSink.Get();
+	RecordAddStreamOriginal = decltype(RecordAddStreamOriginal)(recordSinkVtbl[5]);
+
 	DetourTransactionBegin();
 	DetourUpdateThread(GetCurrentThread());
-	DetourAttach(&(PVOID&)RemoveAllEffectsOriginal, Hook::RemoveAllEffectsHook);
+	DetourAttach(&(PVOID&)removeAllEffects, Hook::RemoveAllEffectsHook);
+	DetourAttach(&(PVOID&)GetAvailableDeviceMediaTypeOriginal, Hook::GetAvailableDeviceMediaTypeHook);
+	DetourAttach(&(PVOID&)SetCurrentDeviceMediaTypeOriginal, Hook::SetCurrentDeviceMediaTypeHook);
 	DetourAttach(&(PVOID&)PreviewAddStreamOriginal, Hook::PreviewAddStreamHook);
 	DetourAttach(&(PVOID&)PhotoAddStreamOriginal, Hook::PhotoAddStreamHook);
+	DetourAttach(&(PVOID&)RecordAddStreamOriginal, Hook::RecordAddStreamHook);
 	DetourTransactionCommit();
 }
 
