@@ -29,7 +29,7 @@ namespace WCUI
 		static constexpr auto MAX_DUI_VERSION = 40;
 		static bool IsDirectUIHooked;
 
-		static HRESULT InitProcessPrivHook(uint32_t dwExpectedVersion, HINSTANCE hModule, bool fRegisterControls, bool fEnableUIAutomationProvider, bool fInitCommctl);
+		static HRESULT WINAPI InitProcessPrivHook(uint32_t dwExpectedVersion, HINSTANCE hModule, bool fRegisterControls, bool fEnableUIAutomationProvider, bool fInitCommctl);
 		static decltype(&InitProcessPrivHook) InitProcessPrivOriginal;
 #endif
 
