@@ -10,13 +10,18 @@ decltype(&Hook::RemoveAllEffectsHook) Hook::RemoveAllEffectsOriginal;
 decltype(&Hook::PreviewAddStreamHook) Hook::PreviewAddStreamOriginal;
 decltype(&Hook::PhotoAddStreamHook) Hook::PhotoAddStreamOriginal;
 
-bool Hook::IsHooked = false;
+bool Hook::IsMediaFoundationHooked = false;
+
+#if ENABLE_DUI_HOOK
+decltype(&Hook::InitProcessPrivHook) Hook::InitProcessPrivOriginal;
+bool Hook::IsDirectUIHooked = false;
+#endif
 
 static decltype(&RegQueryValueExW) OriginalRegQueryValueExW = RegQueryValueExW;
 
-HRESULT Hook::CoCreateInstanceHook(_In_ REFCLSID rclsid, _In_opt_ LPUNKNOWN pUnkOuter, _In_ DWORD dwClsContext, _In_ REFIID riid, _COM_Outptr_ _At_(*ppv, _Post_readable_size_(_Inexpressible_(varies))) LPVOID  FAR* ppv)
+HRESULT WINAPI Hook::CoCreateInstanceHook(_In_ REFCLSID rclsid, _In_opt_ LPUNKNOWN pUnkOuter, _In_ DWORD dwClsContext, _In_ REFIID riid, LPVOID* ppv)
 {
-	if (rclsid == CLSID_MFCaptureEngine && riid == IID_IMFCaptureEngine)
+	if (rclsid == CLSID_MFCaptureEngine)
 	{
 		ComPtr<IMFCaptureEngineClassFactory> factory;
 		HRESULT hr = CoCreateInstanceOriginal(CLSID_MFCaptureEngineClassFactory, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&factory));
@@ -28,37 +33,70 @@ HRESULT Hook::CoCreateInstanceHook(_In_ REFCLSID rclsid, _In_opt_ LPUNKNOWN pUnk
 		if (FAILED(hr))
 			return hr;
 
-		if (!IsHooked)
+		if (!IsMediaFoundationHooked)
 		{
 			hr = InstallInternal(engine.Get());
 			if (FAILED(hr))
 				return hr;
 
-			IsHooked = true;
+			IsMediaFoundationHooked = true;
 		}
 
-		return engine.CopyTo(riid, ppv);
+		if (riid == IID_IMFCaptureEngine)
+			return engine.CopyTo(riid, ppv);
+		else if (riid == IID_IMFCaptureEngineClassFactory)
+			return factory.CopyTo(riid, ppv);
+		else
+			return E_NOINTERFACE;
 	}
 
 	return CoCreateInstanceOriginal(rclsid, pUnkOuter, dwClsContext, riid, ppv);
 }
 
-HRESULT Hook::RemoveAllEffectsHook(IMFCaptureSource* thisPtr, DWORD dwSourceStreamIndex, DWORD dwMediaTypeIndex, IMFMediaType** ppMediaType)
+HRESULT WINAPI Hook::RemoveAllEffectsHook(IMFCaptureSource* thisPtr, DWORD dwSourceStreamIndex, DWORD dwMediaTypeIndex, IMFMediaType** ppMediaType)
 {
 	return thisPtr->GetAvailableDeviceMediaType(MF_CAPTURE_ENGINE_PREFERRED_SOURCE_STREAM_FOR_VIDEO_RECORD, dwMediaTypeIndex, ppMediaType);
 }
 
-HRESULT Hook::PreviewAddStreamHook(IMFCaptureSink* thisPtr, DWORD dwSourceStreamIndex, IMFMediaType* pMediaType, IMFAttributes* pAttributes, DWORD* pdwSinkStreamIndex)
+HRESULT WINAPI Hook::PreviewAddStreamHook(IMFCaptureSink* thisPtr, DWORD dwSourceStreamIndex, IMFMediaType* pMediaType, IMFAttributes* pAttributes, DWORD* pdwSinkStreamIndex)
 {
 	return PreviewAddStreamOriginal(thisPtr, MF_CAPTURE_ENGINE_PREFERRED_SOURCE_STREAM_FOR_VIDEO_RECORD, pMediaType, pAttributes, pdwSinkStreamIndex);
 }
 
-HRESULT Hook::PhotoAddStreamHook(IMFCaptureSink* thisPtr, DWORD dwSourceStreamIndex, IMFMediaType* pMediaType, IMFAttributes* pAttributes, DWORD* pdwSinkStreamIndex)
+HRESULT WINAPI Hook::PhotoAddStreamHook(IMFCaptureSink* thisPtr, DWORD dwSourceStreamIndex, IMFMediaType* pMediaType, IMFAttributes* pAttributes, DWORD* pdwSinkStreamIndex)
 {
 	return PhotoAddStreamOriginal(thisPtr, MF_CAPTURE_ENGINE_PREFERRED_SOURCE_STREAM_FOR_VIDEO_RECORD, pMediaType, pAttributes, pdwSinkStreamIndex);
 }
 
-LSTATUS Hook::RegQueryValueExHook
+#if ENABLE_DUI_HOOK
+HRESULT WINAPI WCUI::Hook::InitProcessPrivHook(uint32_t dwExpectedVersion, HINSTANCE hModule, bool fRegisterControls, bool fEnableUIAutomationProvider, bool fInitCommctl)
+{
+	auto result = InitProcessPrivOriginal(14, hModule, fRegisterControls, fEnableUIAutomationProvider, fInitCommctl);
+	if (!SUCCEEDED(result))
+	{
+		result = InitProcessPrivOriginal(9, hModule, fRegisterControls, fEnableUIAutomationProvider, fInitCommctl);
+
+		if (!SUCCEEDED(result))
+		{
+			result = InitProcessPrivOriginal(8, hModule, fRegisterControls, fEnableUIAutomationProvider, fInitCommctl);
+
+			if (!SUCCEEDED(result))
+			{
+				for (uint32_t i = 10; i <= MAX_DUI_VERSION; i++)
+				{
+					result = InitProcessPrivOriginal(i, hModule, fRegisterControls, fEnableUIAutomationProvider, fInitCommctl);
+					if (SUCCEEDED(result))
+						return result;
+				}
+			}
+		}
+	}
+
+	return result;
+}
+#endif
+
+LSTATUS WINAPI Hook::RegQueryValueExHook
 (
 	_In_ HKEY hKey,
 	_In_opt_ LPCWSTR lpValueName,
@@ -78,6 +116,25 @@ LSTATUS Hook::RegQueryValueExHook
 
 		if (lpData)
 			*(DWORD*)lpData = 4111;
+
+#if ENABLE_DUI_HOOK
+		if (!IsDirectUIHooked)
+		{
+			HMODULE dmod = GetModuleHandle(L"dui70.dll");
+			if (!dmod) dmod = LoadLibrary(L"dui70.dll");
+
+			InitProcessPrivOriginal = (decltype(&InitProcessPrivHook))GetProcAddress(dmod, "InitProcessPriv");
+			if (InitProcessPrivOriginal)
+			{
+				DetourTransactionBegin();
+				DetourUpdateThread(GetCurrentThread());
+				DetourAttach(&(PVOID&)InitProcessPrivOriginal, Hook::InitProcessPrivHook);
+				DetourTransactionCommit();
+
+				IsDirectUIHooked = true;
+			}
+		}
+#endif
 
 		return ERROR_SUCCESS;
 	}

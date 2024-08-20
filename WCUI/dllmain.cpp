@@ -32,7 +32,7 @@ static FARPROC GetSystemFunction(const wchar_t* module, const char* name)
     return GetProcAddress(mod, name);
 }
 
-extern "C" HRESULT __declspec(dllexport) WINAPI DWriteCreateFactory(unsigned int factoryType, REFIID iid, IUnknown** factory)
+extern "C" HRESULT WINAPI DWriteCreateFactory(unsigned int factoryType, REFIID iid, IUnknown** factory)
 {
     // LOAD_LIBRARY_SEARCH_SYSTEM32 doesn't work for some reason
     auto func = (decltype(&DWriteCreateFactory))GetSystemFunction(L"dwrite.dll", __FUNCTION__);
