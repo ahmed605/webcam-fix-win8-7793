@@ -1,0 +1,15 @@
+namespace WCUI.WinRT
+{
+	[interface_name("ITranscodeOperation", 5F5D217B-43E7-4D63-8364-BDB0C4F44069)]
+	[static_name("ITranscodeFactory", FA9E391C-793E-447C-A2A9-2C6F530A8FC7)]
+	runtimeclass TranscodeOperation
+	{
+		[default_overload]
+		[method_name("CreateTranscodeURL")]
+		static TranscodeOperation CreateTranscode(String source, String destination, Object profile);
+		[method_name("CreateTranscodeFile")]
+		static TranscodeOperation CreateTranscode(Object source, Object destination, Object profile);
+		[method_name("CreateTranscodeStream")]
+		static TranscodeOperation CreateTranscode(Windows.Storage.Streams.IRandomAccessStream source, Windows.Storage.Streams.IRandomAccessStream destination, Object profile);
+	};
+}

@@ -1,0 +1,32 @@
+LIBRARY
+EXPORTS
+	WinRTGetActivationFactory
+	WinRTRegisterActivationFactories
+	WinRTUninitialize
+	WinRTRevokeActivationFactories
+	WinRTInitialize
+	CreateImmersiveWindow
+	GlobalFree=Kernel32.GlobalFree
+	LocalFree=Kernel32.LocalFree
+	LocalAlloc=Kernel32.LocalAlloc
+	lstrlenW=Kernel32.lstrlenW
+	GlobalAlloc=Kernel32.GlobalAlloc
+	RoGetActivationFactory=ComBase.RoGetActivationFactory
+	RoInitialize=ComBase.RoInitialize
+	RoUninitialize=ComBase.RoUninitialize
+	RoRegisterActivationFactories=ComBase.RoRegisterActivationFactories
+	RoRevokeActivationFactories=ComBase.RoRevokeActivationFactories
+	RoActivateInstance=ComBase.RoActivateInstance
+	RoGetApartmentIdentifier=ComBase.RoGetApartmentIdentifier
+	RoGetErrorReportingFlags=ComBase.RoGetErrorReportingFlags
+	RoSetErrorReportingFlags=ComBase.RoSetErrorReportingFlags
+	RoOriginateError=ComBase.RoOriginateError
+	RoClearError=ComBase.RoClearError
+	RoReportUnhandledError=ComBase.RoReportUnhandledError
+	RoFailFastWithErrorContext=ComBase.RoFailFastWithErrorContext
+	RoTransformError=ComBase.RoTransformError
+	RoCaptureErrorContext=ComBase.RoCaptureErrorContext
+	RoGetAgileReference=ComBase.RoGetAgileReference
+	RoRegisterForApartmentShutdown=ComBase.RoRegisterForApartmentShutdown
+	RoUnregisterForApartmentShutdown=ComBase.RoUnregisterForApartmentShutdown
+	GetCurrentImmersivePPI=User32.GetDpiForSystem

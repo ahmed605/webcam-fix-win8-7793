@@ -6,6 +6,7 @@
 #include <mfapi.h>
 #include <mfcaptureengine.h>
 #include <cstdint>
+#include <slpublic.h>
 
 #define ENABLE_DUI_HOOK false
 
@@ -15,7 +16,9 @@ namespace WCUI
 	{
 	private:
 		static decltype(&CoCreateInstance) CoCreateInstanceOriginal;
+		static decltype(&SLGetWindowsInformationDWORD) SLGetWindowsInformationDWORDOriginal;
 		static HRESULT WINAPI CoCreateInstanceHook(_In_ REFCLSID rclsid, _In_opt_ LPUNKNOWN pUnkOuter, _In_ DWORD dwClsContext, _In_ REFIID riid, LPVOID* ppv);
+		static HRESULT WINAPI SLGetWindowsInformationDWORDHook(_In_ PCWSTR pwszValueName, _Out_ DWORD* pdwValue);
 		
 		static HRESULT WINAPI RemoveAllEffectsHook(IMFCaptureSource* thisPtr, DWORD dwSourceStreamIndex, DWORD dwMediaTypeIndex, IMFMediaType** ppMediaType);
 		static HRESULT WINAPI GetAvailableDeviceMediaTypeHook(IMFCaptureSource* thisPtr, DWORD dwSourceStreamIndex, IMFMediaType* pMediaType);

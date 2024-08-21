@@ -6,6 +6,7 @@ using namespace WCUI;
 using namespace Microsoft::WRL;
 
 decltype(&CoCreateInstance) Hook::CoCreateInstanceOriginal = CoCreateInstance;
+decltype(&SLGetWindowsInformationDWORD) Hook::SLGetWindowsInformationDWORDOriginal = SLGetWindowsInformationDWORD;
 decltype(&Hook::RemoveAllEffectsHook) Hook::GetAvailableDeviceMediaTypeOriginal;
 decltype(&Hook::GetAvailableDeviceMediaTypeHook) Hook::SetCurrentDeviceMediaTypeOriginal;
 decltype(&Hook::PreviewAddStreamHook) Hook::PreviewAddStreamOriginal;
@@ -53,6 +54,17 @@ HRESULT WINAPI Hook::CoCreateInstanceHook(_In_ REFCLSID rclsid, _In_opt_ LPUNKNO
 	}
 
 	return CoCreateInstanceOriginal(rclsid, pUnkOuter, dwClsContext, riid, ppv);
+}
+
+HRESULT WINAPI Hook::SLGetWindowsInformationDWORDHook(_In_ PCWSTR pwszValueName, _Out_ DWORD* pdwValue)
+{
+	if (pwszValueName && wcscmp(pwszValueName, L"SLC-Component-RP-02") == 0)
+	{
+		*pdwValue = 1;
+		return S_OK;
+	}
+
+	return SLGetWindowsInformationDWORDOriginal(pwszValueName, pdwValue);
 }
 
 HRESULT WINAPI Hook::RemoveAllEffectsHook(IMFCaptureSource* thisPtr, DWORD dwSourceStreamIndex, DWORD dwMediaTypeIndex, IMFMediaType** ppMediaType)
@@ -214,9 +226,13 @@ void Hook::Install()
 	HMODULE cmod = GetModuleHandle(L"combase.dll");
 	CoCreateInstanceOriginal = (decltype(&CoCreateInstance))GetProcAddress(cmod, "CoCreateInstance");
 
+	HMODULE smod = GetModuleHandle(L"slc.dll");
+	SLGetWindowsInformationDWORDOriginal = (decltype(&SLGetWindowsInformationDWORD))GetProcAddress(smod, "SLGetWindowsInformationDWORD");
+
 	DetourTransactionBegin();
 	DetourUpdateThread(GetCurrentThread());
 	DetourAttach(&(PVOID&)OriginalRegQueryValueExW, Hook::RegQueryValueExHook);
 	DetourAttach(&(PVOID&)CoCreateInstanceOriginal, Hook::CoCreateInstanceHook);
+	DetourAttach(&(PVOID&)SLGetWindowsInformationDWORDOriginal, Hook::SLGetWindowsInformationDWORDHook);
 	DetourTransactionCommit();
 }
